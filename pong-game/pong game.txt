@@ -1,0 +1,405 @@
+INCLUDE Irvine32.inc
+
+Position2 MACRO
+mov dl,A
+mov dh,B
+call gotoxy
+add B,1
+ENDM
+
+IndexPosition MACRO
+    mov dl,A
+    mov dh,B
+    call gotoxy
+ENDM
+
+PrintString MACRO buffer
+    push edx
+    mov edx,offset buffer
+    call WriteString
+    call crlf
+    pop edx
+ENDM
+
+WelcomeNote MACRO
+    ;
+    Position2
+    PrintString WelcomeNoticeLine
+
+    Position2
+    PrintString WelcomeNoticeText1
+
+    Position2
+    PrintString WelcomeNoticeText6
+
+    Position2
+    PrintString WelcomeNoticeText2
+
+    Position2
+    PrintString WelcomeNoticeText6
+
+    Position2
+    PrintString WelcomeNoticeText3
+
+    Position2
+    PrintString WelcomeNoticeText4
+
+    Position2
+    PrintString WelcomeNoticeText5
+
+    Position2
+    PrintString WelcomeNoticeLine
+
+    ;Controls
+    Position2
+    PrintString control1
+
+    Position2
+    PrintString WelcomeNoticeText6
+
+    Position2
+    PrintString control2
+
+    Position2
+    PrintString control3
+
+    Position2
+    PrintString control5
+
+    Position2
+    PrintString WelcomeNoticeLine
+
+    Position2
+    PrintString waitKeyMessage
+    call readchar
+
+ENDM
+
+
+.data
+    WelcomeNoticeLine  BYTE "+========================================+", 0
+    WelcomeNoticeText1 BYTE "|                 WELCOME                |", 0
+    WelcomeNoticeText2 BYTE "|                PONG GAME               |", 0
+    WelcomeNoticeText3 BYTE "|          23K-0730 MUHAMMAD ALI         |", 0
+    WelcomeNoticeText4 BYTE "|          23K-0608 AYAN HUSSAIN         |", 0
+WelcomeNoticeText5 BYTE "|           23K-0798 UMER KHAN           |", 0
+    WelcomeNoticeText6 BYTE "|                                        |", 0
+
+    control1 byte "|                CONTROLS                |",0
+    control2 byte "|              W : MOVE UP               |",0
+    control3 byte "|             S : MOVE DOWN              |",0
+    control5 byte "|                X : EXIT                |",0
+
+    ScreenWidth BYTE 80
+    ScreenHeight BYTE 25
+    LineWidth BYTE 41
+    NumberOfLines BYTE 6
+    A BYTE ?
+    B BYTE ?
+
+    waitKeyMessage    BYTE "PRESS ANY KEY TO START...", 0
+
+    ; Strings for display
+    welcomeMessage BYTE "Welcome to Pong Game!", 0Dh, 0Ah, "Use W/S to move the paddle up and down.", 0
+    startMessage BYTE "Press any key to start...", 0
+    gameOverMessage BYTE "Game Over! You missed the ball!", 0
+    scoreMessage BYTE "Your final score is: ", 0
+
+    ; Game elements
+    paddleChar BYTE "|"
+    ballChar BYTE "O"
+    paddleX BYTE 78        
+    paddleY BYTE 12      
+    ballX BYTE 40          
+    ballY BYTE 12          
+    ballDX BYTE 1          
+    ballDY BYTE 1          
+    prevbally BYTE ?
+    prevballx BYTE ?
+    prevpaddley BYTE ?
+    inputChar BYTE ?
+    score DWORD 0
+
+    boxTop BYTE "+------------------------------------------------------------------------------+", 0
+    boxSide BYTE "|", 0
+    boxBottom BYTE "+------------------------------------------------------------------------------+", 0
+
+
+    GameOverArt1 BYTE "  #####      #     #     #  #######      #####   #     #  #######  ###### ",  0
+    GameOverArt2 BYTE " #     #    # #    ##   ##  #           #     #  #     #  #        #     #",  0
+    GameOverArt3 BYTE " #         #   #   # # # #  #           #     #  #     #  #        #     #",  0
+    GameOverArt4 BYTE " #  ####  #     #  #  #  #  #####       #     #  #     #  #####    ###### ",  0
+    GameOverArt5 BYTE " #     #  #######  #     #  #           #     #   #   #   #        #   #  ",  0
+    GameOverArt6 BYTE " #     #  #     #  #     #  #           #     #    # #    #        #    # ",  0
+    GameOverArt7 BYTE "  #####   #     #  #     #  #######      #####      #     #######  #     #",  0
+
+
+.code
+main PROC
+
+    ; Calculate center positions
+    mov al, ScreenWidth
+    sub al, LineWidth        ; ScreenWidth - LineWidth
+    shr al, 1                ; Divide by 2 for horizontal centering
+    mov A, al                ; Store horizontal center in A
+
+    mov al, ScreenHeight
+    shr al, 2                ; Divide by 2 (ScreenHeight / 2)
+    mov bl, NumberOfLines
+    shr bl, 1                ; Divide by 2 (NumberOfLines / 2)
+    sub al, bl               ; Subtract NumberOfLines / 2
+    mov B, al                ; Store vertical center in B
+
+    ; Display the Welcome Note
+    WelcomeNote
+call clrscr
+
+    ;mov edx, OFFSET welcomeMessage
+    ;call WriteString
+    ;mov edx, OFFSET startMessage
+    ;call crlf
+    ;call WriteString
+    ;call ReadChar
+
+    call clrscr  
+    call Randomize
+
+    ; Draw initial game box
+    call DrawBox
+    call DrawPaddle
+    call DrawBall
+
+gameLoop:
+    ; Move the ball
+    call UpdateBall
+
+    ; Check collision with paddle or walls
+    call CheckCollision
+
+    ; Draw paddle and ball
+    call DrawPaddle
+    call DrawBall
+
+    ; Update score
+    mov dl, 0
+    mov dh, 26
+    call Gotoxy
+    mov edx, OFFSET scoreMessage
+    call WriteString
+    mov eax, score
+    call WriteInt
+
+    ; Check user input for paddle movement
+    call CheckInput
+
+    ; Delay for smooth gameplay
+    mov eax, 150
+    call Delay
+
+    ; Repeat game loop
+    jmp gameLoop
+    exit
+main endp
+
+gameOver proc
+call DisplayGameOver
+mov edx, OFFSET scoreMessage
+    call crlf
+    call WriteString
+    mov eax, score
+   call WriteInt
+    call crlf
+    PrintString gameOverMessage
+    mov eax, 3000
+    call Delay
+        ret
+gameOver ENDP
+DrawBox PROC
+   
+    mov dl, 0          
+    mov dh, 0          
+    call Gotoxy
+    mov edx, OFFSET boxTop
+    call WriteString
+
+     mov ecx, 24
+     mov dl, 0          
+     mov dh, 1        
+     call Gotoxy
+L1:
+    mov edx, OFFSET boxSide
+    call WriteString
+    call crlf
+    loop L1  
+
+mov dl, 80        
+mov dh, 1        
+mov ecx, 24
+call Gotoxy    
+mov bh, 1
+L2:
+    mov edx, OFFSET boxSide  
+    call WriteString
+    call crlf
+    mov dl, 80
+    inc bh
+    mov dh, bh
+    call Gotoxy 
+    loop L2
+
+    mov dl, 0          
+    mov dh, 24          
+    call Gotoxy
+    mov edx, OFFSET boxBottom
+    call WriteString
+    ret
+DrawBox ENDP
+
+DrawPaddle PROC
+; Clear previous paddle position
+call crlf
+    mov dl, paddleX
+    mov dh, prevpaddley
+    call Gotoxy
+    mov al, " "
+    call WriteChar
+
+    ; Draw new paddle
+    mov eax, lightblue + (black * 16)
+    call SetTextColor
+    mov dl, paddleX
+    mov dh, paddleY
+    call Gotoxy
+    mov al, paddleChar
+    call WriteChar
+    mov eax, white  ; (black * 16)
+    call SetTextColor
+    ret
+DrawPaddle ENDP
+
+DrawBall PROC
+    ; Clear previous ball position
+    mov dl, prevballx
+    mov dh, prevbally
+    call Gotoxy
+    mov al, " "
+    call WriteChar
+
+    ; Draw new ball
+    mov  eax,green+(black*16)
+    call SetTextColor
+    mov dl, ballX
+    mov dh, ballY
+    call Gotoxy
+    mov al, ballChar
+    call WriteChar
+     mov  eax,white
+    call SetTextColor
+    ret
+DrawBall ENDP
+
+CheckInput PROC
+    call ReadChar
+    mov inputChar, al
+
+    ; Move paddle up with 'W'
+    cmp inputChar, "w"
+    je moveUp
+
+    ; Move paddle down with 'S'
+    cmp inputChar, "s"
+    je moveDown
+
+moveUp:
+    cmp paddleY, 1  ; Check upper boundary
+    jle noInput
+    mov al, paddleY
+    mov prevpaddley, al
+    dec paddleY
+    ret
+
+moveDown:
+    cmp paddleY, 23  ; Check lower boundary
+    jge noInput
+    mov al, paddleY
+    mov prevpaddley, al
+    inc paddleY
+    ret
+
+noInput:
+    ret
+CheckInput ENDP
+
+UpdateBall PROC
+    ; Update ball positionsss
+    mov al, ballX
+    mov prevballx, al
+    add al, ballDX
+    mov ballX, al
+
+    mov al, ballY
+    mov prevbally, al
+    add al, ballDY
+    mov ballY, al
+    ret
+UpdateBall ENDP
+
+CheckCollision PROC
+    ; Check collision with top and bottom walls
+    cmp ballY, 1
+    jne checkBottom
+    neg ballDY  ; Reverse vertical direction
+
+checkBottom:
+    cmp ballY, 23
+    jne checkRightWall
+    neg ballDY  ; Reverse vertical direction
+
+checkRightWall:
+    cmp ballX, 79
+    jne checkLeftWall
+    mov al, paddleY
+    cmp ballY, al  
+    jne someProcedure
+    inc score  
+    neg ballDX  
+    ret
+
+checkLeftWall:
+    cmp ballX, 1
+    jne endCollision
+    neg ballDX  
+
+endCollision:
+    ret
+CheckCollision ENDP
+
+someProcedure PROC
+    call gameOver  
+        call clrscr
+        exit
+    ret
+someProcedure ENDP
+
+DisplayGameOver PROC
+    call Clrscr                     ; Clear the screen
+mov eax, lightblue + (black * 16)
+call settextcolor
+    ; Print each part of the art
+    call crlf
+    call crlf
+
+    PrintString GameOverArt1
+    PrintString GameOverArt2
+    PrintString GameOverArt3
+    PrintString GameOverArt4
+    PrintString GameOverArt5
+    PrintString GameOverArt6
+    PrintString GameOverArt7
+
+mov eax, white + (black * 16)
+call settextcolor
+    ret
+DisplayGameOver ENDP
+
+END main

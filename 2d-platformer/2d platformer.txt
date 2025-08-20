@@ -1,0 +1,395 @@
+INCLUDE Irvine32.inc
+
+Position2 MACRO 
+	mov dl,A
+	mov dh,B
+	call gotoxy
+	add B,1
+ENDM
+
+IndexPosition MACRO 
+    mov dl,A
+    mov dh,B
+    call gotoxy
+ENDM
+
+PrintString MACRO buffer
+    push edx
+    mov edx,offset buffer
+    call WriteString
+    call crlf
+    pop edx
+ENDM
+
+WelcomeNote MACRO
+    ;
+    Position2
+    PrintString WelcomeNoticeLine
+
+    Position2
+    PrintString WelcomeNoticeText1
+
+    Position2
+    PrintString WelcomeNoticeText6
+
+    Position2
+    PrintString WelcomeNoticeText2
+
+    Position2
+    PrintString WelcomeNoticeText6
+
+    Position2
+    PrintString WelcomeNoticeText3
+
+    Position2
+    PrintString WelcomeNoticeText4
+
+    Position2
+    PrintString WelcomeNoticeText5
+
+    Position2
+    PrintString WelcomeNoticeLine
+
+    ;Controls
+    Position2
+    PrintString control1
+
+    Position2
+    PrintString WelcomeNoticeText6
+
+    Position2
+    PrintString control2
+
+    Position2
+    PrintString control3
+
+    Position2
+    PrintString control4
+
+    Position2
+    PrintString control5
+
+    Position2
+    PrintString WelcomeNoticeLine
+
+    Position2
+    PrintString waitKeyMessage
+    call readchar
+
+ENDM
+
+.data
+    ground BYTE "--------------------------------------------------------------------------------", 0
+
+    strScore BYTE "SCORE: ", 0
+    score BYTE 0
+
+    xPos BYTE 20
+    yPos BYTE 20
+
+    xCoinPos BYTE ?
+    yCoinPos BYTE ?
+
+    inputChar BYTE ?
+
+    enemyX BYTE 40          ; Initial X position of the enemy
+    enemyY BYTE 27          ; Initial Y position of the enemy
+
+    waitKeyMessage    BYTE "PRESS ANY KEY TO START...", 0
+    gameOverMessage   BYTE "                      YOU WERE CAUGHT BY THE ENEMY!", 0
+    finalScoreMessage BYTE "                              FINAL SCORE: ", 0
+
+    WelcomeNoticeLine  BYTE "+========================================+", 0
+    WelcomeNoticeText1 BYTE "|                 WELCOME                |", 0
+    WelcomeNoticeText2 BYTE "|             2D PLATFORMER              |", 0
+    WelcomeNoticeText3 BYTE "|          23K-0730 MUHAMMAD ALI         |", 0
+    WelcomeNoticeText4 BYTE "|          23K-0608 AYAN HUSSAIN         |", 0
+	WelcomeNoticeText5 BYTE "|           23K-0798 UMER KHAN           |", 0
+    WelcomeNoticeText6 BYTE "|                                        |", 0
+
+    ScreenWidth BYTE 80
+    ScreenHeight BYTE 25
+    LineWidth BYTE 41
+    NumberOfLines BYTE 6
+    A BYTE ?
+    B BYTE ?
+
+    control1 byte "|                CONTROLS                |",0
+    control2 byte "|              W : MOVE UP               |",0
+    control3 byte "|             A : MOVE LEFT              |",0
+    control4 byte "|             D : MOVE RIGHT             |",0
+    control5 byte "|                X : EXIT                |",0
+
+    GameOverArt1 BYTE "  #####      #     #     #  #######      #####   #     #  #######  ###### ",  0
+    GameOverArt2 BYTE " #     #    # #    ##   ##  #           #     #  #     #  #        #     #",  0
+    GameOverArt3 BYTE " #         #   #   # # # #  #           #     #  #     #  #        #     #",  0
+    GameOverArt4 BYTE " #  ####  #     #  #  #  #  #####       #     #  #     #  #####    ###### ",  0
+    GameOverArt5 BYTE " #     #  #######  #     #  #           #     #   #   #   #        #   #  ",  0
+    GameOverArt6 BYTE " #     #  #     #  #     #  #           #     #    # #    #        #    # ",  0
+    GameOverArt7 BYTE "  #####   #     #  #     #  #######      #####      #     #######  #     #",  0
+
+.code
+main PROC
+
+    ; Calculate center positions
+    mov al, ScreenWidth
+    sub al, LineWidth        ; ScreenWidth - LineWidth
+    shr al, 1                ; Divide by 2 for horizontal centering
+    mov A, al                ; Store horizontal center in A
+
+    mov al, ScreenHeight
+    shr al, 2                ; Divide by 2 (ScreenHeight / 2)
+    mov bl, NumberOfLines
+    shr bl, 1                ; Divide by 2 (NumberOfLines / 2)
+    sub al, bl               ; Subtract NumberOfLines / 2
+    mov B, al                ; Store vertical center in B
+
+    ; Display the Welcome Note
+    WelcomeNote
+	call clrscr
+
+    ; Draw ground at (0,29):
+    mov dl, 0
+    mov dh, 29
+    call Gotoxy
+    mov edx, OFFSET ground
+    call WriteString
+
+    call DrawPlayer
+
+    call CreateRandomCoin
+    call DrawCoin
+
+    call Randomize
+
+    gameLoop:
+        ; Draw player and enemy
+        call DrawPlayer
+        call DrawEnemy
+
+        ; Check if the player touches the enemy
+        mov al, xPos
+        cmp al, enemyX   ; Check if player X position is same as enemy X
+        jne noCollision
+        mov al, yPos
+        cmp al, enemyY   ; Check if player Y position is same as enemy Y
+        je endGame       ; If both X and Y match, end game
+
+    noCollision:
+        ; getting points:
+        mov bl, xPos
+        cmp bl, xCoinPos
+        jne notCollecting
+        mov bl, yPos
+        cmp bl, yCoinPos
+        jne notCollecting
+        ; player is intersecting coin:
+        inc score
+        call CreateRandomCoin
+        call DrawCoin
+
+        call UpdateEnemyPosition
+        call DrawEnemy
+
+    notCollecting:
+        ; Set text color to white
+        mov eax, white  ; (black * 16)
+        call SetTextColor
+
+        ; Draw score:
+        mov dl, 0
+        mov dh, 0
+        call Gotoxy
+        mov edx, OFFSET strScore
+        call WriteString
+        mov al, score
+        call Writedec
+
+    ; gravity logic:
+    gravity:
+        cmp yPos, 27
+        jg onGround
+        ; make player fall:
+        call UpdatePlayer
+        inc yPos
+        call DrawPlayer
+        mov eax, 80
+        call Delay
+        jmp gravity
+
+    onGround:
+        ; Get user key input:
+        call ReadChar
+        mov inputChar, al
+
+        ; Exit game if user types 'x':
+        cmp inputChar, "x"
+        je exitGame
+
+        cmp inputChar, "w"
+        je moveUp
+
+        cmp inputChar, "a"
+        je moveLeft
+
+        cmp inputChar, "d"
+        je moveRight
+
+    moveUp:
+        ; Allow player to jump:
+        mov ecx, 1
+
+    jumpLoop:
+        call UpdatePlayer
+        dec yPos
+        call DrawPlayer
+        mov eax, 70
+        call Delay
+        loop jumpLoop
+        jmp gameLoop
+
+    moveLeft:
+        ; Prevent moving beyond the left boundary (X = 0):
+        cmp xPos, 0
+        je noMoveLeft   ; If X is already 0, do nothing
+        call UpdatePlayer
+        dec xPos
+        call DrawPlayer
+        jmp gameLoop
+
+    noMoveLeft:
+        jmp gameLoop
+
+    moveRight:
+        ; Prevent moving beyond the right boundary (X = 79):
+        cmp xPos, 79
+        je noMoveRight   ; If X is already 79, do nothing
+        call UpdatePlayer
+        inc xPos
+        call DrawPlayer
+        jmp gameLoop
+
+    noMoveRight:
+        jmp gameLoop
+
+    endGame:
+        call DisplayGameOver 
+        call crlf
+        PrintString gameOverMessage
+	
+
+    ; Display the final score
+    mov edx, OFFSET finalScoreMessage  ; "Your final score is: "
+    call crlf
+    call WriteString
+    mov al, score                     ; Load the final score
+    call Writedec                     ; Print the score
+    call crlf
+	call crlf
+	call crlf
+	call crlf
+	call crlf
+	call crlf
+
+    ; Pause before exiting
+    mov eax, 1000
+    call Delay
+    jmp exitGame
+
+    exitGame:
+        exit
+main ENDP
+
+DrawPlayer PROC
+	; draw player at (xPos,yPos):
+	mov eax, lightblue + (black *16)
+	call SetTextColor
+	mov dl,xPos
+	mov dh,yPos
+	call Gotoxy
+	mov al,"X"
+	call WriteChar
+	ret
+DrawPlayer ENDP
+
+UpdatePlayer PROC
+	mov dl,xPos
+	mov dh,yPos
+	call Gotoxy
+	mov al," "
+	call WriteChar
+	ret
+UpdatePlayer ENDP
+
+DrawCoin PROC
+	mov eax,yellow + (yellow * 16)
+	call SetTextColor
+	mov dl,xCoinPos
+	mov dh,yCoinPos
+	call Gotoxy
+	mov al,"X"
+	call WriteChar
+	ret
+DrawCoin ENDP
+
+CreateRandomCoin PROC
+    ; Create a new random X position for the coin:
+    mov eax, 55    ; Set range from 1 to 55 (to fit the screen width)
+    inc eax
+    call RandomRange
+    mov xCoinPos, al
+    mov yCoinPos, 27   ; Coin Y position stays at 27 (bottom of the screen)
+    
+    ; Ensure coin doesn't spawn on player or enemy:
+    mov dl, xCoinPos
+    cmp dl, xPos
+    je CreateRandomCoin ; If the coin's X is the same as player, regenerate
+    
+    cmp dl, enemyX
+    je CreateRandomCoin ; If the coin's X is the same as enemy, regenerate
+    
+     ret
+CreateRandomCoin ENDP
+
+DrawEnemy PROC
+    mov eax, red +  (black * 16)      ; Set text color to white (or any desired color for the enemy)
+    call SetTextColor
+    mov dl, enemyX      ; X position of the enemy
+    mov dh, enemyY      ; Y position of the enemy
+    call Gotoxy
+    mov al, "E"         ; Draw the enemy as 'E'
+    call WriteChar
+    ret
+DrawEnemy ENDP
+
+UpdateEnemyPosition PROC
+    mov eax, 80  ; Screen width
+    call RandomRange
+    mov enemyX, al
+    mov enemyY, 27 ; Keep the enemy's Y position the same
+    ret
+UpdateEnemyPosition ENDP
+
+DisplayGameOver PROC
+    call Clrscr                     ; Clear the screen
+	mov eax, lightblue + (black * 16)
+	call settextcolor
+    ; Print each part of the art
+    call crlf
+    call crlf
+
+    PrintString GameOverArt1
+    PrintString GameOverArt2
+    PrintString GameOverArt3
+    PrintString GameOverArt4
+    PrintString GameOverArt5
+    PrintString GameOverArt6
+    PrintString GameOverArt7
+
+	mov eax, white + (black * 16)
+	call settextcolor
+
+    ret
+DisplayGameOver ENDP
+
+END main
